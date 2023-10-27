@@ -1,0 +1,11 @@
+{
+    "legBottom" : 0,
+    "legTop" : 50,
+    "legBottomSpacing" : 25,
+    "legTopSpacing" : 15,
+    "legDiameter" : 1.5,
+    "legThickness" : 0.075,
+    "braceDiameter" : 0.5,
+    "braceThickness" : 0.05,
+    "nBays" : 3
+}

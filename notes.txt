@@ -1,0 +1,8 @@
+https://threejs.org/docs/index.html#manual/en/introduction/Installation
+npm install --save three
+npm install --save-dev vite
+
+npx vite
+
+
+npm install vite-plugin-singlefile --save-dev
