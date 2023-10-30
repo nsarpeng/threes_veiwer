@@ -1,9 +1,48 @@
 body {
 	margin: 0;
-	background-color: #000;
-	color: #fff;
+	background-color: #f0f0f0;
+	color: #444;
 	font-family: Monospace;
 	font-size: 13px;
 	line-height: 24px;
 	overscroll-behavior: none;
 }
+
+#container {
+	position: absolute;
+  }
+
+.overlay {
+	position: absolute;
+	top: 30%;
+	left: 6%;
+	color: black;
+	font-size: 14px;
+	z-index: 1; /* Ensure it's displayed on top of the 3D scene */
+  }
+
+#overlay1 {
+	top: 29%;
+}
+
+#overlay2 {
+top: 39.4%;
+}
+
+#overlay3 {
+top: 49.8%;
+}
+
+#overlay4 {
+top: 60.2%;
+}
+
+#overlay5 {
+top: 70.6%;
+}
+
+#overlay6 {
+top: 81%;
+}
+
+  

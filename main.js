@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Water } from 'three/addons/objects/Water.js';
-import { Sky } from 'three/addons/objects/Sky.js';
+//import { Water } from 'three/addons/objects/Water.js';
+//import { Sky } from 'three/addons/objects/Sky.js';
+import { Lut } from 'three/addons/math/Lut.js';
 
 const container = document.getElementById( 'container' );
 
 const scene = new THREE.Scene();
+
+let uiScene, lut, orthoCamera;
 
 
 const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
@@ -16,16 +19,19 @@ scene.background = new THREE.Color( 0xf0f0f0 );
 
 let group;
 
+let sprite;
+
 let raycaster, intersects;
 let pointer, INTERSECTED;
-let water,sun;
+//let water,sun;
 
 raycaster = new THREE.Raycaster();
 pointer = new THREE.Vector2();
 
 //
 
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer( { antialias: true });
+renderer.autoClear = false;
 renderer.setPixelRatio( window.devicePixelRatio );
 renderer.setSize( window.innerWidth, window.innerHeight );
 container.appendChild( renderer.domElement );
@@ -33,7 +39,7 @@ container.appendChild( renderer.domElement );
 // Water
 
 const waterGeometry = new THREE.PlaneGeometry( 100, 100 );
-waterGeometry.rotateX(-Math.PI * 0.5); 
+//waterGeometry.rotateX(-Math.PI * 0.5); 
 
 const waterMaterial = new THREE.MeshBasicMaterial( {color: 0x05C3DD, side: THREE.DoubleSide,transparent:true,opacity:0.5 });
 const waterplane = new THREE.Mesh( waterGeometry, waterMaterial );
@@ -46,7 +52,7 @@ scene.add( waterplane );
 // mudline
 
 const mudlineGeometry = new THREE.PlaneGeometry( 100, 100 );
-mudlineGeometry.rotateX(-Math.PI * 0.5); 
+//mudlineGeometry.rotateX(-Math.PI * 0.5); 
 
 const mudlineMaterial = new THREE.MeshBasicMaterial( {color: 0xC4A484, side: THREE.DoubleSide,transparent:true,opacity:0.5 });
 const mudlineplane = new THREE.Mesh(mudlineGeometry, mudlineMaterial );
@@ -72,7 +78,7 @@ controls.maxDistance = 5000;
 
 controls.maxPolarAngle = Math.PI / 2;
 
-//
+// create the group that will contain the meshes
 
 group = new THREE.Group();
 
@@ -98,6 +104,7 @@ const gui = new GUI();
 
 const myControls = {showSea: false,
 showMudline:false,
+showContour: false,
 mudline:-55};
 
 const folderSky = gui.addFolder( 'Sea and mudline' );
@@ -105,21 +112,227 @@ folderSky.add(myControls,'showSea').name('Show sea').onChange(updateSea);
 folderSky.add(myControls,'showMudline').name('Show mudline').onChange(updateSea);
 folderSky.add(myControls,'mudline').name('Mudline level').onChange(updateSea);
 
-const propControls = {OD:0,Thk:0};
+const propControls = {OD:0,Thk:0,Contour:false};
 
 const folderProps = gui.addFolder('Properties');
 folderProps.add(propControls,'OD').name("Outer diameter").listen();
 folderProps.add(propControls,'Thk').name("Thickness").listen();
+folderProps.add(propControls,'Contour').name("Contour thk").onChange(updateContour);
+
+//
+
+// contour sprite
+
+uiScene = new THREE.Scene();
+
+lut = new Lut();
+
+orthoCamera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 1, 2 );
+orthoCamera.position.set( 0.9, 0, 1 );
+
+sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial( {
+        map: new THREE.CanvasTexture( lut.createCanvas() )
+    } ) 
+);
+
+sprite.material.map.colorSpace = THREE.SRGBColorSpace;
+//sprite.material.color.setColorName("red");
+sprite.scale.x = 0.0125;
+uiScene.add(sprite);
+//uiScene.add(orthoCamera);
+
+lut.setColorMap( 'rainbow');
+
+lut.setMax( 2000 );
+lut.setMin( 0 );
+
+const map = sprite.material.map;
+lut.updateCanvas( map.image );
+map.needsUpdate = true;
+
+// create the text of the legend as sprites
+
+const text = "hello world"
+
+sprite.visible = false;
 
 
 //
+
+function legendText(lowVal,highVal)
+{
+
+    let nvals = 6;
+    for (var i = 1; i<=nvals; i++){
+        let cval;
+        if (i == 1)
+        {
+            cval = highVal;
+        }
+        else if(i == nvals)
+        {
+            cval = lowVal;
+        }
+        else
+        {
+            cval = (highVal-(highVal-lowVal)/(nvals)*i);
+        }
+        
+    document.getElementById("overlay" + i.toString()).innerHTML = (cval*1000).toFixed(0).toString() + " mm";
+    } 
+}
+
+function clearLegend()
+{
+    var divs = document.querySelectorAll('.overlay'); // Get all divs with the specified class
+    for (var i = 0; i < divs.length; i++) {
+      divs[i].innerHTML = ''; // Clear the innerHTML of each div
+    }
+}
 
 window.addEventListener( 'resize', onWindowResize );
 document.addEventListener( 'pointermove', onPointerMove );
 
 animate();
 
+function updateContour()
+{
 
+    if (propControls.Contour == true)
+    {
+        let limits = maxmins();
+
+        lut.setMin(limits.minThk);
+        lut.setMax(limits.maxThk);
+        
+        group.children.forEach((mesh) => {
+            if (mesh instanceof THREE.Mesh)
+            {
+                let colVal = (mesh.userData.thk-limits.minThk)/(limits.maxThk-limits.minThk);
+                //mesh.material.color.set(colourScale((mesh.userData.thk-limits.minThk)/(limits.maxThk-limits.minThk)));
+                mesh.material.color.set(lut.getColor(colVal));
+                mesh.colorsNeedUpdate = true;
+            }
+        }
+        )
+        
+        legendText(limits.minThk,limits.maxThk)
+        sprite.visible = true;
+
+    }
+    else
+    {
+        group.children.forEach((mesh) => {
+            if (mesh instanceof THREE.Mesh)
+            {
+                mesh.material.color.setHex (0xF7B500);
+                mesh.colorsNeedUpdate = true;
+            }
+        }
+        );
+        sprite.visible = false;
+        clearLegend();
+    }
+}
+
+function colourScale(intensity)
+{
+    // returns a colour based on the val, assumes val is between 0 and 1
+    const hue = (1 - intensity) * 240; // Map intensity to the hue (0 to 240)
+    const saturation = 1; // You can set the saturation and value to 1 for full saturation and brightness
+    const lightness = 0.5;
+  
+    // Create an HSV color
+    const hslColor = new THREE.Color().setHSL(hue / 360, saturation, lightness);
+  
+    return hslColor;
+
+}
+
+
+function maxmins()
+{
+    let maxThk = 0;
+    let minThk = 999999;
+    let maxOD = 0;
+    let minOD = 999999;
+
+    group.children.forEach((mesh) => {
+        if (mesh instanceof THREE.Mesh)
+        {
+            if (mesh.userData.thk> maxThk)
+            {
+                maxThk = mesh.userData.thk;
+            }
+            if (mesh.userData.thk< minThk)
+            {
+                minThk = mesh.userData.thk;
+            }
+
+            if (mesh.userData.od> maxOD)
+            {
+                maxOD = mesh.userData.od;
+            }
+            if (mesh.userData.od< minOD)
+            {
+                minOD = mesh.userData.od;
+            }
+        }
+    });
+
+    return {maxThk: maxThk,minThk:minThk,maxOD:maxOD,minOD:minOD};
+}
+
+function updateContour1(){
+    if (propControls.Contour == false)
+    {
+        const hsvColor = new THREE.Color();
+
+        group.children.forEach((mesh) => {
+          if (mesh instanceof THREE.Mesh) {
+            const geometry = mesh.geometry;
+            const extrudePath = geometry.parameters.path; // Access the extrude path
+        
+            // Assuming your extruded geometry uses a shape
+            const shape = geometry.parameters.shapes; // Access the shape
+        
+            const shapePoints = shape.extractPoints();
+        
+            const points = shapePoints.shape;
+        
+     
+            
+              const vertexA = points[0];
+              const vertexB = points[1];
+              const vertexC = points[2];
+        
+            // Calculate average Y coordinate for the face
+            const avgY = (vertexA.y + vertexB.y + vertexC.y) / 3;
+    
+            // Calculate hue (from blue to red, for example)
+            const hue = (avgY + 5) / 10; // Adjust for the desired range (e.g., 0-1)
+    
+            // Set saturation and value to 1 for full color saturation and brightness
+            const saturation = 1;
+            const value = 1;
+    
+            hsvColor.setHSL(hue, saturation, value);
+    
+            // Set face colors
+            geometry.faces.color = hsvColor.clone();
+
+        
+            // Update geometry
+            geometry.colorsNeedUpdate = true;
+          }
+        });
+    }
+    else
+    {
+
+    }
+}
 
 function updateSea(){
     if (myControls.showSea == false)
@@ -156,6 +369,7 @@ function animate() {
 
     render();
 	renderer.render( scene, camera );
+    renderer.render( uiScene, orthoCamera );
 }
 
 function render()
@@ -175,7 +389,7 @@ function render()
 
             // reset the colour
             if (INTERSECTED != null){
-                INTERSECTED.material.color.setHex( 0xF7B500);
+                INTERSECTED.material.color.set( INTERSECTED.userData.lastCol);
             }
 
             intersects[0].object.material.color.setColorName("red");
@@ -192,15 +406,16 @@ function render()
 
         //intersects[0].object.material.color.setColorName("grey");
         if (INTERSECTED != undefined){
-        INTERSECTED.material.color.setHex( 0xF7B500);
+            INTERSECTED.material.color.set( INTERSECTED.userData.lastCol);
         }
         INTERSECTED = null;
 
 
     } 
 
-
+    //renderer.clear();
     renderer.render( scene, camera );
+    renderer.render( uiScene, orthoCamera );
 }
 
 function onWindowResize() {
@@ -370,14 +585,14 @@ function pipe(start,end,diameter,thickness){
         extrudePath: new THREE.CatmullRomCurve3(path)
     };
 
-    let color = 0xF7B500;
+    let color = new THREE.Color().setHex(0xF7B500);
 
     let geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
 
     let mesh = new THREE.Mesh( geometry, new THREE.MeshPhongMaterial( { color: color } ) );
 
     // add some user data attributes
-    let metaData = {od:diameter,thk:thickness,mg:1};
+    let metaData = {od:diameter,thk:thickness,mg:1,lastCol:color};
     mesh.userData = metaData;
 
     return mesh;
@@ -408,11 +623,12 @@ function conic(start,end,start_dia,end_dia,start_thk,end_thk)
     // Translate oriented stick to location between endpoints
     geometry.translate((bx+ax)/2, (by+ay)/2, (bz+az)/2)
 
-    let color = 0xF7B500;
+
+    let color = new THREE.Color().setHex(0xF7B500);
 
     let mesh = new THREE.Mesh( geometry, new THREE.MeshPhongMaterial( { color: color } ) );
 
-    let metaData = {od:start_dia,thk:start_thk,mg:1};
+    let metaData = {od:start_dia,thk:start_thk,mg:1,lastCol: color};
     mesh.userData = metaData;
 
     return mesh;
