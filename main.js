@@ -160,11 +160,68 @@ sprite.visible = false;
 
 //
 
+function hasSelectorText(rule){
+    return rule.selectorText !== undefined;
+}
+
+function getStyleSheet(){
+
+
+    for (let i = 0; i < document.styleSheets.length; i++) {
+        const stylesheet = document.styleSheets[i];
+        const href = stylesheet.href;
+
+        if (href && href.endsWith('main.css')) {
+            return stylesheet;
+        }
+    }
+
+    return null; // Return null if no matching stylesheet is found
+}
+
+
 function legendText(lowVal,highVal)
 {
+    // first find the style sheet we want
 
+    // clear existing css rules for overlay
+    let styleSheet = getStyleSheet(); //document.styleSheets[0];
+    for (let i = styleSheet.cssRules.length-1; i>=0; i--)
+    {
+        // check there is a selector text for the rule to compure
+        if (hasSelectorText(styleSheet.cssRules[i])){
+            if (styleSheet.cssRules[i].selectorText.substring(0,8) === "#overlay"){
+                styleSheet.deleteRule(i);
+            }
+        }
+    }
+
+    // clear the existing divs for the overlay
+    const divsToDelete = document.querySelectorAll(".overlay");
+    divsToDelete.forEach(function(div){
+        div.parentNode.removeChild(div);
+    });
+
+    // number of annotations on the legend
     let nvals = 6;
-    for (var i = 1; i<=nvals; i++){
+
+    // set the % abs position of the top and bottom legend text
+    let topPos = 27;
+    let bottomPos = 78;
+    let cPos;
+
+    for  (let i = 1; i<= nvals; i++){
+        // add the styles
+        cPos = topPos+(bottomPos-topPos)/(nvals-1) * (i-1);
+        styleSheet.insertRule("#overlay" + i.toFixed(0).toString() + "{top: " + cPos.toFixed(3).toString() + "%;}")
+
+        // create the divs
+        const newDiv = document.createElement("div");
+        newDiv.className = "overlay";
+        newDiv.id = "overlay" + i.toFixed(0).toString();
+        
+
+        // add the text t the div
         let cval;
         if (i == 1)
         {
@@ -178,9 +235,13 @@ function legendText(lowVal,highVal)
         {
             cval = (highVal-(highVal-lowVal)/(nvals)*i);
         }
+
+        newDiv.innerHTML = (cval*1000).toFixed(0).toString() + " mm";
         
-    document.getElementById("overlay" + i.toString()).innerHTML = (cval*1000).toFixed(0).toString() + " mm";
-    } 
+        // add the div
+        document.body.appendChild(newDiv);
+    }
+
 }
 
 function clearLegend()
