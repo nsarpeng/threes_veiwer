@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 //import { Water } from 'three/addons/objects/Water.js';
 //import { Sky } from 'three/addons/objects/Sky.js';
 import { Lut } from 'three/addons/math/Lut.js';
+import './main.css';
 
 const container = document.getElementById( 'container' );
 
@@ -27,6 +28,14 @@ let pointer, INTERSECTED;
 
 raycaster = new THREE.Raycaster();
 pointer = new THREE.Vector2();
+
+//
+
+// Create a tooltip div
+const tooltip = document.createElement('div');
+tooltip.className = 'tooltip';
+tooltip.style.display = 'none';
+document.body.appendChild(tooltip);
 
 //
 
@@ -118,7 +127,7 @@ const folderProps = gui.addFolder('Properties');
 folderProps.add(propControls,'OD').name("Outer diameter").listen();
 folderProps.add(propControls,'Thk').name("Thickness").listen();
 folderProps.add(propControls,'Contour').name("Contour").onChange(updateContour);
-folderProps.add(propControls,'ContourVal',['OD','Thk']).name("Contour value").onChange(updateContour);
+folderProps.add(propControls,'ContourVal',['OD','ID','Thk']).name("Contour value").onChange(updateContour);
 //folderProps.add(propControls,'ContourCol',['rainbow','cooltowarm']).name("Colourmap").onChange(updateContour);
 
 //
@@ -158,9 +167,51 @@ sprite.visible = false;
 
 
 //
+let tooltipTimeout;
+// Function to show the tooltip
+function showTooltip(event, content) {
+
+    const meshWorldPosition = event.geometry.boundingSphere.center; //new THREE.Vector3();
+    //event.getWorldPosition(meshWorldPosition);
+
+    // Project the world position to screen coordinates
+    const screenPosition = meshWorldPosition.clone().project(camera);
+
+    // Get the absolute clientX and clientY
+    const absoluteX = (screenPosition.x + 1) / 2 * window.innerWidth + 5;
+    const absoluteY = (-screenPosition.y + 1) / 2 * window.innerHeight;
+    //console.log("x = " +absoluteX.toFixed(2).toString() + " - y = " + absoluteY.toFixed(2).toString());
+
+    tooltip.textContent = content;
+    tooltip.style.left = absoluteX + 'px';
+    tooltip.style.top = absoluteY + 'px';
+    tooltip.style.display = 'block';
+
+}
+
+// Function to hide the tooltip
+function hideTooltip() {
+
+    tooltip.style.display = 'none';
+}
+
 
 function hasSelectorText(rule){
     return rule.selectorText !== undefined;
+}
+
+// Function to check if a stylesheet has a rule for a specific ID
+function hasRuleForId(stylesheet, id) {
+  for (let i = 0; i < stylesheet.cssRules.length; i++) {
+    const rule = stylesheet.cssRules[i];
+    
+    // Check if the rule's selectorText contains the specific ID
+    if (rule.selectorText && rule.selectorText.includes(`#${id}`)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 function getStyleSheet(){
@@ -168,11 +219,16 @@ function getStyleSheet(){
 
     for (let i = 0; i < document.styleSheets.length; i++) {
         const stylesheet = document.styleSheets[i];
-        const href = stylesheet.href;
-
-        if (href && href.endsWith('main.css')) {
+        if (hasRuleForId(stylesheet,"keyoverlaystylesheetmarker"))
+        {
             return stylesheet;
         }
+        /*const href = stylesheet.href;
+
+        if (href && href.includes('main.css')) {
+            return stylesheet;
+        }
+        */
     }
 
     return null; // Return null if no matching stylesheet is found
@@ -207,7 +263,7 @@ function legendText(lowVal,highVal)
     deleteLegendDivs();
 
     // number of annotations on the legend
-    let nvals = 6;
+    let nvals = 8;
 
     // set the % abs position of the top and bottom legend text
     let topPos = 27;
@@ -217,6 +273,7 @@ function legendText(lowVal,highVal)
     for  (let i = 1; i<= nvals; i++){
         // add the styles
         cPos = topPos+(bottomPos-topPos)/(nvals-1) * (i-1);
+        console.log(cPos);
         styleSheet.insertRule("#overlay" + i.toFixed(0).toString() + "{top: " + cPos.toFixed(3).toString() + "%;}")
 
         // create the divs
@@ -272,34 +329,52 @@ function updateContour()
         lut.setColorMap( propControls.ContourCol);
         sprite.map = new THREE.CanvasTexture( lut.createCanvas());
 
-        let limits = maxmins();
+        let limits = maxmins()
+    
+        let mymax,mymin;
 
         if (propControls.ContourVal=="Thk"){
-            lut.setMin(limits.minThk);
-            lut.setMax(limits.maxThk);
-            legendText(limits.minThk,limits.maxThk)
+            mymax = limits.maxThk;
+            mymin = limits.minThk;
         }
-        else
+        else if (propControls.ContourVal=="OD")
         {
-            lut.setMin(limits.minOD);
-            lut.setMax(limits.maxOD);
-            legendText(limits.minOD,limits.maxOD)
+            mymax = limits.maxOD;
+            mymin = limits.minOD;
         }
+        else{
+            mymax = limits.maxID;
+            mymin = limits.minID;
+        }
+
+        lut.setMin(mymin);
+        lut.setMax(mymax);
+        legendText(mymin,mymax);
         
         group.children.forEach((mesh) => {
             if (mesh instanceof THREE.Mesh)
             {
                 let colVal;
+                let myval;
                 if (propControls.ContourVal == "Thk"){
-                    colVal = (mesh.userData.thk-limits.minThk)/(limits.maxThk-limits.minThk);
+                    myval = mesh.userData.thk;
+                }
+                else if (propControls.ContourVal == "OD")
+                {
+                    myval = mesh.userData.od;
                 }
                 else
                 {
-                    colVal = (mesh.userData.od-limits.minOD/(limits.maxOD-limits.minOD));
+                    myval = mesh.userData.id;
                 }
+                colVal = (myval-mymin/(mymax-mymin));
                 //mesh.material.color.set(colourScale((mesh.userData.thk-limits.minThk)/(limits.maxThk-limits.minThk)));
-                mesh.material.color.set(lut.getColor(colVal));
-                mesh.userData.lastCol = lut.getColor(colVal);
+
+                let mycol;
+                mycol = lut.getColor(myval);
+
+                mesh.material.color.set(mycol);
+                mesh.userData.lastCol = mycol;
                 mesh.colorsNeedUpdate = true;
             }
         }
@@ -329,27 +404,14 @@ function updateContour()
     }
 }
 
-function colourScale(intensity)
-{
-    // returns a colour based on the val, assumes val is between 0 and 1
-    const hue = (1 - intensity) * 240; // Map intensity to the hue (0 to 240)
-    const saturation = 1; // You can set the saturation and value to 1 for full saturation and brightness
-    const lightness = 0.5;
-  
-    // Create an HSV color
-    const hslColor = new THREE.Color().setHSL(hue / 360, saturation, lightness);
-  
-    return hslColor;
-
-}
-
-
 function maxmins()
 {
     let maxThk = 0;
     let minThk = 999999;
     let maxOD = 0;
     let minOD = 999999;
+    let maxID = 0;
+    let minID = 999999;
 
     group.children.forEach((mesh) => {
         if (mesh instanceof THREE.Mesh)
@@ -371,61 +433,21 @@ function maxmins()
             {
                 minOD = mesh.userData.od;
             }
+
+            if (mesh.userData.id> maxID)
+            {
+                maxID = mesh.userData.id;
+            }
+            if (mesh.userData.id< minID)
+            {
+                minID = mesh.userData.id;
+            }
         }
     });
 
-    return {maxThk: maxThk,minThk:minThk,maxOD:maxOD,minOD:minOD};
+    return {maxThk: maxThk,minThk:minThk,maxOD:maxOD,minOD:minOD,maxID:maxID,minID:minID};
 }
 
-function updateContour1(){
-    if (propControls.Contour == false)
-    {
-        const hsvColor = new THREE.Color();
-
-        group.children.forEach((mesh) => {
-          if (mesh instanceof THREE.Mesh) {
-            const geometry = mesh.geometry;
-            const extrudePath = geometry.parameters.path; // Access the extrude path
-        
-            // Assuming your extruded geometry uses a shape
-            const shape = geometry.parameters.shapes; // Access the shape
-        
-            const shapePoints = shape.extractPoints();
-        
-            const points = shapePoints.shape;
-        
-     
-            
-              const vertexA = points[0];
-              const vertexB = points[1];
-              const vertexC = points[2];
-        
-            // Calculate average Y coordinate for the face
-            const avgY = (vertexA.y + vertexB.y + vertexC.y) / 3;
-    
-            // Calculate hue (from blue to red, for example)
-            const hue = (avgY + 5) / 10; // Adjust for the desired range (e.g., 0-1)
-    
-            // Set saturation and value to 1 for full color saturation and brightness
-            const saturation = 1;
-            const value = 1;
-    
-            hsvColor.setHSL(hue, saturation, value);
-    
-            // Set face colors
-            geometry.faces.color = hsvColor.clone();
-
-        
-            // Update geometry
-            geometry.colorsNeedUpdate = true;
-          }
-        });
-    }
-    else
-    {
-
-    }
-}
 
 function updateSea(){
     if (myControls.showSea == false)
@@ -492,6 +514,8 @@ function render()
 
             INTERSECTED = intersects[0].object;
 
+            showTooltip(INTERSECTED, 'OD = ' + (INTERSECTED.userData.od*1000).toFixed(0).toString() + ' mm\nID = '+ (INTERSECTED.userData.id*1000).toFixed(0).toString() +' mm\nThk = ' + (INTERSECTED.userData.thk*1000).toFixed(0).toString() + " mm");
+
         }
 
 
@@ -502,6 +526,7 @@ function render()
             INTERSECTED.material.color.set( INTERSECTED.userData.lastCol);
         }
         INTERSECTED = null;
+        hideTooltip();
 
 
     } 
@@ -685,7 +710,7 @@ function pipe(start,end,diameter,thickness){
     let mesh = new THREE.Mesh( geometry, new THREE.MeshPhongMaterial( { color: color } ) );
 
     // add some user data attributes
-    let metaData = {od:diameter,thk:thickness,mg:1,lastCol:color};
+    let metaData = {od:diameter,thk:thickness,mg:1,lastCol:color,id:(diameter-2*thickness).valueOf()};
     mesh.userData = metaData;
 
     return mesh;
@@ -721,7 +746,7 @@ function conic(start,end,start_dia,end_dia,start_thk,end_thk)
 
     let mesh = new THREE.Mesh( geometry, new THREE.MeshPhongMaterial( { color: color } ) );
 
-    let metaData = {od:start_dia,thk:start_thk,mg:1,lastCol: color};
+    let metaData = {od:start_dia,thk:start_thk,mg:1,lastCol: color,id:(start_dia-2*start_thk).valueOf()};
     mesh.userData = metaData;
 
     return mesh;
