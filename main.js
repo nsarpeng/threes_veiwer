@@ -39,7 +39,7 @@ container.appendChild( renderer.domElement );
 // Water
 
 const waterGeometry = new THREE.PlaneGeometry( 100, 100 );
-//waterGeometry.rotateX(-Math.PI * 0.5); 
+waterGeometry.rotateX(-Math.PI * 0.5); 
 
 const waterMaterial = new THREE.MeshBasicMaterial( {color: 0x05C3DD, side: THREE.DoubleSide,transparent:true,opacity:0.5 });
 const waterplane = new THREE.Mesh( waterGeometry, waterMaterial );
@@ -52,7 +52,7 @@ scene.add( waterplane );
 // mudline
 
 const mudlineGeometry = new THREE.PlaneGeometry( 100, 100 );
-//mudlineGeometry.rotateX(-Math.PI * 0.5); 
+mudlineGeometry.rotateX(-Math.PI * 0.5); 
 
 const mudlineMaterial = new THREE.MeshBasicMaterial( {color: 0xC4A484, side: THREE.DoubleSide,transparent:true,opacity:0.5 });
 const mudlineplane = new THREE.Mesh(mudlineGeometry, mudlineMaterial );
@@ -179,6 +179,14 @@ function getStyleSheet(){
 }
 
 
+function deleteLegendDivs(){
+    const divsToDelete = document.querySelectorAll(".overlay");
+    divsToDelete.forEach(function(div){
+        div.parentNode.removeChild(div);
+    });
+
+}
+
 function legendText(lowVal,highVal)
 {
     // first find the style sheet we want
@@ -196,10 +204,7 @@ function legendText(lowVal,highVal)
     }
 
     // clear the existing divs for the overlay
-    const divsToDelete = document.querySelectorAll(".overlay");
-    divsToDelete.forEach(function(div){
-        div.parentNode.removeChild(div);
-    });
+    deleteLegendDivs();
 
     // number of annotations on the legend
     let nvals = 6;
@@ -312,12 +317,15 @@ function updateContour()
             if (mesh instanceof THREE.Mesh)
             {
                 mesh.material.color.setHex (0xF7B500);
+                let lastCol = new THREE.Color().setHex(0xF7B500);
+                mesh.userData.lastCol = lastCol;
                 mesh.colorsNeedUpdate = true;
             }
         }
         );
         sprite.visible = false;
         //clearLegend();
+        deleteLegendDivs();
     }
 }
 
