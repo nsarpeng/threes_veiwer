@@ -112,12 +112,14 @@ folderSky.add(myControls,'showSea').name('Show sea').onChange(updateSea);
 folderSky.add(myControls,'showMudline').name('Show mudline').onChange(updateSea);
 folderSky.add(myControls,'mudline').name('Mudline level').onChange(updateSea);
 
-const propControls = {OD:0,Thk:0,Contour:false};
+const propControls = {OD:0,Thk:0,Contour:false,ContourVal:'OD',ContourCol:'rainbow'};
 
 const folderProps = gui.addFolder('Properties');
 folderProps.add(propControls,'OD').name("Outer diameter").listen();
 folderProps.add(propControls,'Thk').name("Thickness").listen();
-folderProps.add(propControls,'Contour').name("Contour thk").onChange(updateContour);
+folderProps.add(propControls,'Contour').name("Contour").onChange(updateContour);
+folderProps.add(propControls,'ContourVal',['OD','Thk']).name("Contour value").onChange(updateContour);
+//folderProps.add(propControls,'ContourCol',['rainbow','cooltowarm']).name("Colourmap").onChange(updateContour);
 
 //
 
@@ -152,9 +154,6 @@ lut.updateCanvas( map.image );
 map.needsUpdate = true;
 
 // create the text of the legend as sprites
-
-const text = "hello world"
-
 sprite.visible = false;
 
 
@@ -244,6 +243,7 @@ function legendText(lowVal,highVal)
 
 }
 
+/*
 function clearLegend()
 {
     var divs = document.querySelectorAll('.overlay'); // Get all divs with the specified class
@@ -251,6 +251,7 @@ function clearLegend()
       divs[i].innerHTML = ''; // Clear the innerHTML of each div
     }
 }
+*/
 
 window.addEventListener( 'resize', onWindowResize );
 document.addEventListener( 'pointermove', onPointerMove );
@@ -262,24 +263,47 @@ function updateContour()
 
     if (propControls.Contour == true)
     {
+        // update the lut colourmap
+        lut.setColorMap( propControls.ContourCol);
+        sprite.map = new THREE.CanvasTexture( lut.createCanvas());
+
         let limits = maxmins();
 
-        lut.setMin(limits.minThk);
-        lut.setMax(limits.maxThk);
+        if (propControls.ContourVal=="Thk"){
+            lut.setMin(limits.minThk);
+            lut.setMax(limits.maxThk);
+            legendText(limits.minThk,limits.maxThk)
+        }
+        else
+        {
+            lut.setMin(limits.minOD);
+            lut.setMax(limits.maxOD);
+            legendText(limits.minOD,limits.maxOD)
+        }
         
         group.children.forEach((mesh) => {
             if (mesh instanceof THREE.Mesh)
             {
-                let colVal = (mesh.userData.thk-limits.minThk)/(limits.maxThk-limits.minThk);
+                let colVal;
+                if (propControls.ContourVal == "Thk"){
+                    colVal = (mesh.userData.thk-limits.minThk)/(limits.maxThk-limits.minThk);
+                }
+                else
+                {
+                    colVal = (mesh.userData.od-limits.minOD/(limits.maxOD-limits.minOD));
+                }
                 //mesh.material.color.set(colourScale((mesh.userData.thk-limits.minThk)/(limits.maxThk-limits.minThk)));
                 mesh.material.color.set(lut.getColor(colVal));
+                mesh.userData.lastCol = lut.getColor(colVal);
                 mesh.colorsNeedUpdate = true;
             }
         }
         )
         
-        legendText(limits.minThk,limits.maxThk)
+        
         sprite.visible = true;
+        
+        //map.needsUpdate = true;
 
     }
     else
@@ -293,7 +317,7 @@ function updateContour()
         }
         );
         sprite.visible = false;
-        clearLegend();
+        //clearLegend();
     }
 }
 
@@ -453,7 +477,7 @@ function render()
                 INTERSECTED.material.color.set( INTERSECTED.userData.lastCol);
             }
 
-            intersects[0].object.material.color.setColorName("red");
+            intersects[0].object.material.color.setHex('0xFF69B4'); //setColorName("red");
             
             propControls.OD = intersects[0].object.userData.od;
             propControls.Thk = intersects[0].object.userData.thk;
